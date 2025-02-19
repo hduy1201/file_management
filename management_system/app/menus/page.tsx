@@ -1,25 +1,42 @@
 "use client";
 
 import { Button, Input, Select, Tree } from "antd";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DownOutlined, RightOutlined, PlusOutlined } from "@ant-design/icons";
-import type { TreeDataNode } from "antd/es/tree";
+
+import type { DataNode } from "antd/es/tree";
+
+// ✅ Tạo interface mở rộng `DataNode` với `depth` và `parentId`
+interface CustomDataNode extends DataNode {
+  depth: number;
+  parentId: string | null;
+}
 
 export default function MenusPage() {
   const [selectedMenu, setSelectedMenu] = useState<string | null>(null);
   const [selectedTreeItem, setSelectedTreeItem] = useState<string | null>(null);
-  const [selectedParentId, setSelectedParentId] = useState<string | null>(null); // Lưu parent_id
-  const [treeData, setTreeData] = useState<TreeDataNode[]>([]);
+  const [treeData, setTreeData] = useState<CustomDataNode[]>([]);
   const [nodeName, setNodeName] = useState<string>("");
   const [nodeDepth, setNodeDepth] = useState<number | null>(null);
   const [parentName, setParentName] = useState<string>("");
 
   useEffect(() => {
     if (selectedMenu) {
-      fetch("http://localhost:3000/explore")
+      const cachedData = localStorage.getItem(`treeData-${selectedMenu}`);
+      if (cachedData) {
+        setTreeData(JSON.parse(cachedData));
+        return;
+      }
+
+      fetch(`http://localhost:3000/explore`)
         .then((res) => res.json())
         .then((data) => {
-          setTreeData([formatApiData(data, null, 0)]); // Root không có parent_id
+          const formattedData = [formatApiData(data, null, 0)];
+          setTreeData(formattedData);
+          localStorage.setItem(
+            `treeData-${selectedMenu}`,
+            JSON.stringify(formattedData)
+          );
         })
         .catch((err) => console.error("Error fetching data:", err));
     } else {
@@ -31,16 +48,14 @@ export default function MenusPage() {
     node: any,
     parentId: string | null,
     depth: number
-  ): TreeDataNode => ({
+  ): CustomDataNode => ({
     title: node.name || "Unnamed",
-    key: node.id || `temp-${Math.random()}`,
+    key: node.id,
     depth: depth,
-    parentId: parentId, // Lưu parent_id ngay tại đây
-    children: node.children
-      ? node.children.map((child: any) =>
-          formatApiData(child, node.id, depth + 1)
-        )
-      : [],
+    parentId: parentId,
+    children: (node.children || []).map((child: any) =>
+      formatApiData(child, node.id, depth + 1)
+    ) as CustomDataNode[],
   });
 
   const fetchNodeChildren = async (nodeKey: string, depth: number) => {
@@ -62,22 +77,22 @@ export default function MenusPage() {
   };
 
   const updateTreeWithChildren = (
-    nodes: TreeDataNode[],
+    nodes: CustomDataNode[],
     parentKey: string,
-    children: TreeDataNode[]
-  ): TreeDataNode[] =>
-    nodes.map((node) => {
-      if (node.key === parentKey) {
-        return { ...node, children: [...node.children, ...children] };
-      }
-      if (node.children) {
-        return {
-          ...node,
-          children: updateTreeWithChildren(node.children, parentKey, children),
-        };
-      }
-      return node;
-    });
+    children: CustomDataNode[]
+  ): CustomDataNode[] =>
+    nodes.map((node) =>
+      node.key === parentKey
+        ? { ...node, children: children as CustomDataNode[] } // 🔹 Ép kiểu ở đây
+        : {
+            ...node,
+            children: updateTreeWithChildren(
+              (node.children as CustomDataNode[]) || [],
+              parentKey,
+              children
+            ),
+          }
+    );
 
   const addNewNode = async (parentKey: string, depth: number) => {
     try {
@@ -88,12 +103,11 @@ export default function MenusPage() {
         body: JSON.stringify({ name: newNodeName, parent_id: parentKey }),
       });
 
-      if (!response.ok) {
+      if (!response.ok)
         throw new Error(`Failed to add node. Status: ${response.status}`);
-      }
 
       const data = await response.json();
-      const newNode: TreeDataNode = {
+      const newNode: CustomDataNode = {
         title: newNodeName,
         key: data.id,
         depth: depth + 1,
@@ -111,21 +125,14 @@ export default function MenusPage() {
 
   const renameNode = async (nodeKey: string, newName: string) => {
     try {
-      if (!selectedParentId) {
-        return;
-      }
-
-      console.log(nodeKey);
-
       const response = await fetch("http://localhost:3000/rename", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newName, id: nodeKey }),
       });
 
-      if (!response.ok) {
+      if (!response.ok)
         throw new Error(`Failed to rename node. Status: ${response.status}`);
-      }
 
       setTreeData((prevTree) => updateNodeName(prevTree, nodeKey, newName));
     } catch (error) {
@@ -139,9 +146,8 @@ export default function MenusPage() {
         method: "DELETE",
       });
 
-      if (!response.ok) {
+      if (!response.ok)
         throw new Error(`Failed to delete node. Status: ${response.status}`);
-      }
 
       setTreeData((prevTree) => removeNode(prevTree, nodeKey));
     } catch (error) {
@@ -150,26 +156,29 @@ export default function MenusPage() {
   };
 
   const updateNodeName = (
-    nodes: TreeDataNode[],
+    nodes: CustomDataNode[],
     key: string,
     newName: string
-  ): TreeDataNode[] =>
-    nodes.map((node) => {
-      if (node.key === key) return { ...node, title: newName };
-      if (node.children)
-        return {
-          ...node,
-          children: updateNodeName(node.children, key, newName),
-        };
-      return node;
-    });
+  ): CustomDataNode[] =>
+    nodes.map((node) =>
+      node.key === key
+        ? { ...node, title: newName }
+        : {
+            ...node,
+            children: updateNodeName(
+              (node.children as CustomDataNode[]) || [],
+              key,
+              newName
+            ),
+          }
+    );
 
-  const removeNode = (nodes: TreeDataNode[], key: string): TreeDataNode[] =>
+  const removeNode = (nodes: CustomDataNode[], key: string): CustomDataNode[] =>
     nodes
       .filter((node) => node.key !== key)
       .map((node) => ({
         ...node,
-        children: removeNode(node.children || [], key),
+        children: removeNode((node.children as CustomDataNode[]) || [], key),
       }));
 
   const onSelectNode = (selectedKeys: React.Key[], { node }: any) => {
@@ -178,7 +187,6 @@ export default function MenusPage() {
       setNodeName(node.title);
       setNodeDepth(node.depth);
       setParentName(node.parentId || "Root");
-      setSelectedParentId(node.parentId); // Lưu `parent_id` ngay khi chọn
     }
   };
 
@@ -234,7 +242,11 @@ export default function MenusPage() {
                 onSelect={onSelectNode}
                 titleRender={(node) => (
                   <div className="flex items-center justify-between w-full">
-                    <span>{node.title}</span>
+                    <span>
+                      {typeof node.title === "function"
+                        ? node.title(node)
+                        : node.title}
+                    </span>
                     <Button
                       icon={<PlusOutlined />}
                       size="small"
