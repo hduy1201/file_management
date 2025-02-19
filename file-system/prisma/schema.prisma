@@ -1,0 +1,16 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model file_system {
+  id                String        @id(map: "file_system_pk") @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  parent_id         String?       @db.Uuid
+  name              String
+  file_system       file_system?  @relation("file_systemTofile_system", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "file_system_file_system_id_fk")
+  other_file_system file_system[] @relation("file_systemTofile_system")
+}
