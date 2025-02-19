@@ -28,7 +28,7 @@ export default function MenusPage() {
         return;
       }
 
-      fetch(`http://localhost:3000/explore`)
+      fetch(`http://64.176.211.47:3000/explore`)
         .then((res) => res.json())
         .then((data) => {
           const formattedData = [formatApiData(data, null, 0)];
@@ -60,7 +60,7 @@ export default function MenusPage() {
 
   const fetchNodeChildren = async (nodeKey: string, depth: number) => {
     try {
-      const res = await fetch(`http://localhost:3000/explore/${nodeKey}`);
+      const res = await fetch(`http://64.176.211.47:3000/explore/${nodeKey}`);
       if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
 
       const data = await res.json();
@@ -97,7 +97,7 @@ export default function MenusPage() {
   const addNewNode = async (parentKey: string, depth: number) => {
     try {
       const newNodeName = "New Node";
-      const response = await fetch("http://localhost:3000/add", {
+      const response = await fetch("http://64.176.211.47:3000/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newNodeName, parent_id: parentKey }),
@@ -125,7 +125,7 @@ export default function MenusPage() {
 
   const renameNode = async (nodeKey: string, newName: string) => {
     try {
-      const response = await fetch("http://localhost:3000/rename", {
+      const response = await fetch("http://64.176.211.47:3000/rename", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newName, id: nodeKey }),
@@ -142,9 +142,12 @@ export default function MenusPage() {
 
   const deleteNode = async (nodeKey: string) => {
     try {
-      const response = await fetch(`http://localhost:3000/delete/${nodeKey}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        `http://64.176.211.47:3000/delete/${nodeKey}`,
+        {
+          method: "DELETE",
+        }
+      );
 
       if (!response.ok)
         throw new Error(`Failed to delete node. Status: ${response.status}`);
